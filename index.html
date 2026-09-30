@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>교무실 초인종 시제품</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=Gowun+Dodum&display=swap" rel="stylesheet">
+<style>
+:root{
+  --wall:#E4EBEF; --plate:#FFFFFF; --ink:#17212B; --muted:#56636E; --line:#C5D0D7;
+  --board:#22453A; --board-deep:#193329; --chalk:#F1F4EC; --chalk-dim:#A7BDB0;
+  --bell:#F2CF4A; --bell-deep:#C9A421; --error:#B3261E;
+  --display:"Do Hyeon","Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif;
+  --body:"Gowun Dodum","Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --wall:#1B2227; --plate:#27313A; --ink:#E8EDF0; --muted:#9BA8B2; --line:#3A4751; --error:#F2968F;
+  }
+}
+:root[data-theme="dark"]{
+  --wall:#1B2227; --plate:#27313A; --ink:#E8EDF0; --muted:#9BA8B2; --line:#3A4751; --error:#F2968F;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+body{height:100%;margin:0;display:flex;flex-direction:column;background:var(--wall);color:var(--ink);font-family:var(--body);font-size:18px;line-height:1.5}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--bell-deep);outline-offset:3px}
+
+/* 상단 막대 */
+.bar{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:10px 20px;border-bottom:1px solid var(--line)}
+.bar-title{margin:0;font-family:var(--display);font-weight:400;font-size:22px}
+.views{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--plate)}
+.views button{border:0;background:none;padding:8px 14px;font-size:16px;color:var(--muted)}
+.views button+button{border-left:1px solid var(--line)}
+.views button[aria-pressed="true"]{background:var(--ink);color:var(--wall)}
+
+.stage{flex:1;min-height:0;display:grid;grid-template-columns:1fr 1fr}
+.stage[data-view="outside"]{grid-template-columns:1fr}
+.stage[data-view="inside"]{grid-template-columns:1fr}
+.stage[data-view="outside"] .board,.stage[data-view="inside"] .door{display:none}
+@media (max-width:900px){
+  .stage{grid-template-columns:1fr;grid-auto-rows:auto;overflow-y:auto}
+}
+
+/* 바깥 화면 (학생용) */
+.door{overflow-y:auto;padding:32px clamp(20px,4vw,48px);display:flex;flex-direction:column}
+.door h2{font-family:var(--display);font-weight:400;font-size:clamp(28px,3.4vw,40px);line-height:1.2;margin:0 0 24px}
+.plates{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px}
+.plate{background:var(--plate);border:1px solid var(--line);border-left:10px solid var(--board);border-radius:6px;padding:22px 18px;text-align:left;display:flex;align-items:baseline;gap:8px;box-shadow:0 2px 0 var(--line)}
+.plate:active{transform:translateY(2px);box-shadow:none}
+.plate-name{font-family:var(--display);font-size:34px;line-height:1}
+.plate-role{color:var(--muted);font-size:17px}
+.plate.absent{border-left-color:var(--line);background:transparent;box-shadow:none;border-style:dashed;border-left-style:solid}
+.plate.absent .plate-name{color:var(--muted)}
+.plate.absent .plate-role{color:var(--error)}
+.away-note{margin:18px 0 0;padding:14px 16px;border-radius:8px;background:var(--plate);border:1px solid var(--line);font-size:20px}
+
+.presence h3{margin:0 0 10px;font-weight:400;font-size:18px;color:var(--chalk-dim)}
+.presence-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.presence-btn{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:12px 14px;border-radius:8px;border:2px solid var(--chalk-dim);background:none;color:var(--chalk);text-align:left}
+.presence-btn .p-name{font-family:var(--display);font-size:24px;line-height:1.1}
+.presence-btn .p-state{font-size:15px;color:var(--chalk-dim)}
+.presence-btn[aria-pressed="true"]{border-color:var(--bell);background:rgba(242,207,74,.14)}
+.presence-btn[aria-pressed="true"] .p-name{color:var(--chalk-dim);text-decoration:line-through}
+.presence-btn[aria-pressed="true"] .p-state{color:var(--bell)}
+
+.ask{display:flex;flex-direction:column;gap:20px;max-width:560px}
+.ask label{font-size:18px;color:var(--muted)}
+.ask input{display:block;width:100%;margin-top:6px;padding:14px 16px;font-size:30px;font-family:var(--display);border:2px solid var(--line);border-radius:8px;background:var(--plate)}
+.ask input:focus{border-color:var(--board);outline:none}
+.err{min-height:1.5em;margin:0;color:var(--error)}
+.ring-row{display:flex;align-items:center;gap:24px;flex-wrap:wrap}
+.bell{width:150px;height:150px;border-radius:50%;border:0;background:radial-gradient(circle at 50% 42%,#FFE58A 0 38%,var(--bell) 39% 100%);box-shadow:0 0 0 12px var(--plate),0 0 0 14px var(--line),0 8px 0 14px var(--bell-deep);font-family:var(--display);font-size:24px;color:#3B2F00;margin:14px}
+.bell:active{transform:translateY(5px);box-shadow:0 0 0 12px var(--plate),0 0 0 14px var(--line),0 3px 0 14px var(--bell-deep)}
+.bell:disabled{opacity:.6}
+.ring-hint{margin:0;color:var(--muted);max-width:14em}
+.back{align-self:flex-start;background:none;border:1px solid var(--line);border-radius:8px;padding:10px 16px;color:var(--muted)}
+
+.done{display:flex;flex-direction:column;gap:8px}
+.done p{margin:0;color:var(--muted);font-size:20px}
+
+/* 안쪽 화면 (교무실용) */
+.board{background:var(--board);color:var(--chalk);overflow-y:auto;padding:28px clamp(20px,4vw,48px);display:flex;flex-direction:column;gap:22px;border-left:8px solid #6B4F32}
+@media (max-width:900px){.board{border-left:0;border-top:8px solid #6B4F32}}
+.board-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}
+.board-head h2{margin:0;font-family:var(--display);font-weight:400;font-size:28px}
+.status{color:var(--chalk-dim);font-size:16px}
+.status.warn{color:var(--bell)}
+
+.unlock{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:16px;border:2px dashed var(--bell);border-radius:10px}
+.unlock button{background:var(--bell);color:#3B2F00;border:0;border-radius:8px;padding:12px 22px;font-family:var(--display);font-size:22px}
+.unlock p{margin:0;flex:1;min-width:12em;color:var(--chalk-dim)}
+
+.now{border-radius:12px;background:var(--board-deep);padding:28px 24px;min-height:190px;display:flex;flex-direction:column;justify-content:center}
+.now-empty{margin:0;color:var(--chalk-dim);font-size:20px}
+.now-teacher{margin:0;font-family:var(--display);font-size:clamp(40px,5vw,64px);line-height:1.1;color:var(--bell)}
+.now-student{margin:6px 0 0;font-family:var(--display);font-size:clamp(26px,3vw,38px);line-height:1.2}
+.now-time{margin:10px 0 0;color:var(--chalk-dim);font-size:16px}
+.now.ringing{animation:flash 1.1s ease-out 3}
+@keyframes flash{0%{box-shadow:0 0 0 0 rgba(242,207,74,.9)}100%{box-shadow:0 0 0 22px rgba(242,207,74,0)}}
+@media (prefers-reduced-motion:reduce){.now.ringing{animation:none;outline:4px solid var(--bell)}}
+
+.log h3{margin:0 0 8px;font-weight:400;font-size:18px;color:var(--chalk-dim)}
+.log ol{list-style:none;margin:0;padding:0}
+.log li{display:flex;align-items:center;gap:14px;padding:10px 0;border-top:1px solid rgba(241,244,236,.15)}
+.log time{color:var(--chalk-dim);font-size:15px;min-width:3.2em}
+.log .who{flex:1}
+.log button{background:none;border:1px solid var(--chalk-dim);color:var(--chalk);border-radius:6px;padding:6px 12px;font-size:15px}
+.log-empty{color:var(--chalk-dim);margin:0}
+
+.settings{border-top:1px solid rgba(241,244,236,.15);padding-top:12px}
+.settings summary{cursor:pointer;color:var(--chalk-dim)}
+.settings-grid{display:grid;gap:14px;margin-top:14px;max-width:460px}
+.settings label{display:flex;flex-direction:column;gap:4px;font-size:16px}
+.settings select,.settings input[type=range]{width:100%}
+.settings select{background:var(--board-deep);border:1px solid var(--chalk-dim);border-radius:6px;padding:8px}
+.settings .check{flex-direction:row;align-items:center;gap:10px}
+.settings .test{justify-self:start;background:var(--chalk);color:var(--board);border:0;border-radius:8px;padding:10px 18px}
+.note{margin:0;color:var(--bell);font-size:15px}
+
+.conn{font-size:15px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.conn::before{content:"";width:10px;height:10px;border-radius:50%;background:var(--line)}
+.conn.on::before{background:#2E8B57}
+.conn.off::before{background:var(--bell-deep)}
+.bar-right{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+
+.plate.away{border-left-color:var(--line);box-shadow:none;background:transparent}
+.plate.away .plate-name{color:var(--muted)}
+.plate.away .plate-role{color:var(--error)}
+.door-msg{min-height:1.5em;margin:16px 0 0;color:var(--error);font-size:19px}
+
+.desk h3{margin:0 0 8px;font-weight:400;font-size:18px;color:var(--chalk-dim)}
+.desk-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.desk-btn{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px;border-radius:8px;border:1px solid var(--chalk-dim);background:transparent;color:var(--chalk);text-align:left}
+.desk-btn .d-name{font-family:var(--display);font-size:22px}
+.desk-btn .d-state{font-size:15px;color:#9FD8B4}
+.desk-btn[aria-pressed="true"]{background:rgba(0,0,0,.25);border-style:dashed}
+.desk-btn[aria-pressed="true"] .d-name{color:var(--chalk-dim)}
+.desk-btn[aria-pressed="true"] .d-state{color:var(--bell)}
+.desk-btn:disabled{opacity:.6}
+.desk-hint{margin:8px 0 0;color:var(--chalk-dim);font-size:15px}
+[hidden]{display:none !important}
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <h1 class="bar-title">교무실 초인종</h1>
+  <div class="bar-right">
+  <span class="conn" id="conn">연결 확인 중</span>
+  <div class="views" role="group" aria-label="화면 보기">
+    <button type="button" data-view="both" aria-pressed="true">나란히 보기</button>
+    <button type="button" data-view="outside" aria-pressed="false">학생용만</button>
+    <button type="button" data-view="inside" aria-pressed="false">교무실용만</button>
+  </div>
+  </div>
+</header>
+
+<main class="stage" id="stage" data-view="both">
+
+  <!-- 바깥 태블릿 -->
+  <section class="door" aria-label="학생용 화면">
+    <div id="stepPick">
+      <h2>만나고 싶은 선생님을 눌러 주세요</h2>
+      <div class="plates" id="plates"></div>
+      <p class="away-note" id="awayNote" role="status" hidden></p>
+    </div>
+
+    <div id="stepName" class="ask" hidden>
+      <h2 id="askTitle"></h2>
+      <label>내 이름
+        <input id="studentName" type="text" maxlength="10" autocomplete="off" enterkeyhint="send">
+      </label>
+      <p class="err" id="nameErr" role="alert"></p>
+      <div class="ring-row">
+        <button type="button" class="bell" id="bellBtn">누르기</button>
+        <p class="ring-hint">누르면 교무실 안에서 선생님 이름과 내 이름이 방송돼요.</p>
+      </div>
+      <button type="button" class="back" id="backBtn">다른 선생님 고르기</button>
+    </div>
+
+    <div id="stepDone" class="done" hidden>
+      <h2 id="doneTitle"></h2>
+      <p>문 앞에서 잠시 기다려 주세요.</p>
+    </div>
+  </section>
+
+  <!-- 안쪽 태블릿 -->
+  <section class="board" aria-label="교무실용 화면">
+    <div class="board-head">
+      <h2>교무실 알림판</h2>
+      <span class="status" id="status" aria-live="polite">대기 중</span>
+    </div>
+
+    <div class="unlock" id="unlock">
+      <button type="button" id="unlockBtn">소리 켜기</button>
+      <p>태블릿을 켤 때 한 번만 눌러 주세요. 누르지 않으면 브라우저가 소리를 막아요.</p>
+    </div>
+
+    <div class="now" id="now" aria-live="assertive">
+      <p class="now-empty" id="nowEmpty">아직 찾아온 학생이 없어요.</p>
+      <div id="nowCall" hidden>
+        <p class="now-teacher" id="nowTeacher"></p>
+        <p class="now-student" id="nowStudent"></p>
+        <p class="now-time" id="nowTime"></p>
+      </div>
+    </div>
+
+    <div class="presence">
+      <h3>자리 표시 · 누르면 부재중으로 바뀌어요</h3>
+      <div class="presence-list" id="presenceList"></div>
+    </div>
+
+    <div class="desk">
+      <h3>선생님 자리 표시</h3>
+      <div class="desk-list" id="deskList"></div>
+      <p class="desk-hint">누르면 부재중과 자리에 있음이 바뀌어요. 부재중인 선생님은 학생 화면에서 호출할 수 없어요.</p>
+    </div>
+
+    <div class="log">
+      <h3>오늘 호출 기록</h3>
+      <p class="log-empty" id="logEmpty">기록이 없어요.</p>
+      <ol id="logList"></ol>
+    </div>
+
+    <details class="settings">
+      <summary>소리 설정</summary>
+      <div class="settings-grid">
+        <label>읽는 속도 <span id="rateVal"></span>
+          <input type="range" id="rate" min="0.7" max="1.3" step="0.05">
+        </label>
+        <label>반복 횟수
+          <select id="repeat">
+            <option value="1">1번</option>
+            <option value="2">2번</option>
+            <option value="3">3번</option>
+          </select>
+        </label>
+        <label>목소리
+          <select id="voice"></select>
+        </label>
+        <p class="note" id="voiceNote" hidden>이 기기에서 한국어 목소리를 찾지 못했어요. 태블릿 설정 &gt; 텍스트 음성 변환에서 한국어 음성을 설치해 주세요.</p>
+        <label class="check"><input type="checkbox" id="chime"> 읽기 전에 띵동 소리 내기</label>
+        <button type="button" class="test" id="testBtn">소리 시험하기</button>
+      </div>
+    </details>
+  </section>
+</main>
+
+<script type="module">
+// ================================================================
+//  ★ 여기에 Firebase 설정값을 붙여 넣으세요 (Firebase 콘솔에서 복사)
+// ================================================================
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCvjthXNvLHMQJB2gBjZRo5TtRU1yC_nPQ",
+  authDomain: "gyomusil-bell-01.firebaseapp.com",
+  projectId: "gyomusil-bell-01",
+  storageBucket: "gyomusil-bell-01.firebasestorage.app",
+  messagingSenderId: "909417827480",
+  appId: "1:909417827480:web:5dc823849a92107f7214ed"
+};
+const FIREBASE_VERSION = "12.19.0";
+// ================================================================
+
+(function(){
+  // 선생님 명단: id는 저장용 영문 기호, name은 화면과 음성에 쓰는 이름
+  const TEACHERS = [
+    {id:'t1', name:'양혜영'}, {id:'t2', name:'이정윤'}, {id:'t3', name:'이훈영'},
+    {id:'t4', name:'전안나'}, {id:'t5', name:'조영민'}
+  ];
+  const $ = id => document.getElementById(id);
+  const LOAD_TIME = Date.now();
+
+  // ---------- 설정 (이 태블릿에만 저장) ----------
+  const settings = { rate:0.95, repeat:2, voiceURI:'', chime:true, view:'both' };
+  try { Object.assign(settings, JSON.parse(localStorage.getItem('doorbell-settings') || '{}')); } catch(e){}
+  function saveSettings(){ try { localStorage.setItem('doorbell-settings', JSON.stringify(settings)); } catch(e){} }
+
+  // ---------- 화면 보기 전환 ----------
+  const stage = $('stage');
+  function setView(v){
+    stage.dataset.view = v; settings.view = v; saveSettings();
+    document.querySelectorAll('.views button').forEach(b => b.setAttribute('aria-pressed', b.dataset.view === v));
+  }
+  document.querySelectorAll('.views button').forEach(b => b.addEventListener('click', () => setView(b.dataset.view)));
+  setView(settings.view);
+  const boardActive = () => stage.dataset.view !== 'outside';   // 교무실 화면이 보일 때만 소리를 냄
+
+  // ---------- Firebase 연결 ----------
+  let backend = null;         // 연결되면 { addCall, setAway }
+  let away = {};              // { t1:true, ... } 부재중인 선생님
+  let calls = [];             // 오늘 호출 기록 [{id, teacher, student, at}]
+  const seen = new Set(); let callsReady = false;
+  const startOfToday = () => { const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); };
+
+  function setConn(on, text){
+    const c = $('conn');
+    c.className = 'conn ' + (on ? 'on' : 'off');
+    c.textContent = text || (on ? '태블릿끼리 연결됨' : '연결 안 됨 · 이 태블릿 안에서만 작동');
+  }
+
+  async function connect(){
+    if (!FIREBASE_CONFIG.apiKey || FIREBASE_CONFIG.apiKey.startsWith('여기')){
+      setConn(false, 'Firebase 설정 전 · 이 태블릿 안에서만 작동'); return;
+    }
+    try {
+      const base = `https://www.gstatic.com/firebasejs/${FIREBASE_VERSION}/`;
+      const { initializeApp } = await import(base + 'firebase-app.js');
+      const { getAuth, signInAnonymously } = await import(base + 'firebase-auth.js');
+      const fs = await import(base + 'firebase-firestore.js');
+
+      const app = initializeApp(FIREBASE_CONFIG);
+      await signInAnonymously(getAuth(app));            // 보이지 않는 익명 로그인 (보안 규칙용)
+      const fdb = fs.getFirestore(app);
+      const callsCol = fs.collection(fdb, 'calls');
+      const stateDoc = fs.doc(fdb, 'state', 'teachers');
+
+      backend = {
+        addCall: c => fs.addDoc(callsCol, c),
+        setAway: next => fs.setDoc(stateDoc, { away: next })
+      };
+      const fail = err => { console.error(err); setConn(false, '연결 끊김 · 새로고침해 주세요'); };
+
+      fs.onSnapshot(stateDoc, snap => {
+        away = (snap.exists() && snap.data().away) || {};
+        renderAway();
+      }, fail);
+
+      fs.onSnapshot(fs.query(callsCol, fs.orderBy('at','desc'), fs.limit(40)), snap => {
+        const t0 = startOfToday();
+        calls = snap.docs.map(d => Object.assign({id:d.id}, d.data())).filter(c => c.at >= t0);
+        renderLog();
+        snap.docChanges().forEach(ch => {
+          const id = ch.doc.id;
+          if (ch.type === 'added' && callsReady && !seen.has(id)){
+            const c = ch.doc.data();
+            if (c.at > LOAD_TIME - 15000 && boardActive()) enqueue({teacher:c.teacher, student:c.student, time:new Date(c.at)});
+          }
+          seen.add(id);
+        });
+        callsReady = true;
+      }, fail);
+
+      setConn(true);
+
+      // 어제 이전 기록은 지워서 학생 이름이 남지 않게 함
+      try {
+        const old = await fs.getDocs(fs.query(callsCol, fs.where('at','<',startOfToday()), fs.limit(200)));
+        for (const d of old.docs){ await fs.deleteDoc(d.ref); }
+      } catch(e){ console.warn('old cleanup', e); }
+    } catch(err){
+      console.error(err);
+      backend = null;
+      setConn(false, '연결 실패 · 설정값과 인터넷을 확인해 주세요');
+    }
+  }
+
+  // ---------- 바깥 화면 ----------
+  let picked = null, doneTimer = null;
+  const plates = $('plates');
+  const plateEls = {};
+  TEACHERS.forEach(t => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'plate';
+    b.innerHTML = '<span class="plate-name"></span><span class="plate-role">선생님</span>';
+    b.firstChild.textContent = t.name;
+    b.addEventListener('click', () => pick(t));
+    plates.appendChild(b); plateEls[t.id] = b;
+  });
+
+  function show(step){
+    ['stepPick','stepName','stepDone'].forEach(id => $(id).hidden = id !== step);
+    if (step === 'stepPick') $('doorMsg').textContent = '';
+  }
+  function pick(t){
+    if (away[t.id]){ $('doorMsg').textContent = t.name + ' 선생님은 지금 자리에 안 계세요. 나중에 다시 와 주세요.'; return; }
+    picked = t;
+    $('askTitle').textContent = t.name + ' 선생님께 알려 드릴게요';
+    $('studentName').value = ''; $('nameErr').textContent = '';
+    $('bellBtn').disabled = false;
+    show('stepName');
+    $('studentName').focus();
+  }
+  $('backBtn').addEventListener('click', () => show('stepPick'));
+
+  async function ring(){
+    const student = $('studentName').value.trim().replace(/\s+/g,' ');
+    if (!student){ $('nameErr').textContent = '이름을 적어 주세요.'; $('studentName').focus(); return; }
+    if (away[picked.id]){ $('nameErr').textContent = picked.name + ' 선생님이 방금 부재중으로 바뀌었어요.'; return; }
+    $('bellBtn').disabled = true;
+    $('studentName').blur();
+    const call = { teacher:picked.name, student, at:Date.now() };
+    if (backend){
+      try { await backend.addCall(call); }
+      catch(e){
+        $('nameErr').textContent = '알리지 못했어요. 와이파이를 확인하고 다시 눌러 주세요.';
+        $('bellBtn').disabled = false; return;
+      }
+    } else {
+      calls.unshift(Object.assign({id:'local'+call.at}, call)); renderLog();
+      enqueue({teacher:call.teacher, student, time:new Date(call.at)});
+    }
+    $('doneTitle').textContent = picked.name + ' 선생님께 알려 드렸어요';
+    show('stepDone');
+    clearTimeout(doneTimer); doneTimer = setTimeout(() => show('stepPick'), 4000);
+  }
+  $('bellBtn').addEventListener('click', ring);
+  $('studentName').addEventListener('keydown', e => { if (e.key === 'Enter') ring(); });
+
+  // ---------- 부재중 표시 ----------
+  const deskBtns = {};
+  TEACHERS.forEach(t => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'desk-btn';
+    b.innerHTML = '<span class="d-name"></span><span class="d-state"></span>';
+    b.firstChild.textContent = t.name;
+    b.addEventListener('click', () => toggleAway(t));
+    $('deskList').appendChild(b); deskBtns[t.id] = b;
+  });
+  let writing = false;
+  async function toggleAway(t){
+    if (writing) return;
+    const next = Object.assign({}, away, {[t.id]: !away[t.id]});
+    if (!backend){ away = next; renderAway(); return; }
+    writing = true; Object.values(deskBtns).forEach(b => b.disabled = true);
+    try { await backend.setAway(next); }
+    catch(e){ setStatus('자리 표시를 바꾸지 못했어요. 다시 눌러 주세요.', true); }
+    writing = false; Object.values(deskBtns).forEach(b => b.disabled = false);
+  }
+  function renderAway(){
+    TEACHERS.forEach(t => {
+      const isAway = !!away[t.id];
+      const b = deskBtns[t.id];
+      b.setAttribute('aria-pressed', isAway);
+      b.lastChild.textContent = isAway ? '부재중' : '자리에 있음';
+      const p = plateEls[t.id];
+      p.classList.toggle('away', isAway);
+      p.lastChild.textContent = isAway ? '부재중' : '선생님';
+    });
+  }
+
+  // ---------- 소리 잠금 해제 ----------
+  let audioCtx = null, unlocked = false;
+  function unlockAudio(){
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+    } catch(e){}
+    if (!unlocked && 'speechSynthesis' in window){
+      const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u);
+    }
+    unlocked = true;
+    $('unlock').hidden = true;
+    if (!speaking) setStatus('대기 중');
+  }
+  document.addEventListener('pointerdown', unlockAudio);
+  $('unlockBtn').addEventListener('click', unlockAudio);
+
+  // ---------- 띵동 소리 ----------
+  function playChime(){
+    return new Promise(res => {
+      if (!audioCtx) return res();
+      const t0 = audioCtx.currentTime + 0.05;
+      [[659.25, 0, 1.0], [523.25, 0.5, 1.4]].forEach(([freq, start, len]) => {
+        [[1, 0.35], [2, 0.08]].forEach(([mult, vol]) => {
+          const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+          o.type = 'sine'; o.frequency.value = freq * mult;
+          g.gain.setValueAtTime(0.0001, t0 + start);
+          g.gain.exponentialRampToValueAtTime(vol, t0 + start + 0.02);
+          g.gain.exponentialRampToValueAtTime(0.0001, t0 + start + len);
+          o.connect(g).connect(audioCtx.destination);
+          o.start(t0 + start); o.stop(t0 + start + len + 0.05);
+        });
+      });
+      setTimeout(res, 1700);
+    });
+  }
+
+  // ---------- 음성 읽기 ----------
+  let voices = [];
+  function loadVoices(){
+    if (!('speechSynthesis' in window)) { $('voiceNote').hidden = false; return; }
+    voices = speechSynthesis.getVoices().filter(v => v.lang && v.lang.toLowerCase().startsWith('ko'));
+    const sel = $('voice'); sel.innerHTML = '';
+    const def = document.createElement('option'); def.value = ''; def.textContent = '기본 한국어 목소리'; sel.appendChild(def);
+    voices.forEach(v => { const o = document.createElement('option'); o.value = v.voiceURI; o.textContent = v.name; sel.appendChild(o); });
+    sel.value = voices.some(v => v.voiceURI === settings.voiceURI) ? settings.voiceURI : '';
+    $('voiceNote').hidden = voices.length > 0 || speechSynthesis.getVoices().length === 0;
+  }
+  if ('speechSynthesis' in window){ loadVoices(); speechSynthesis.onvoiceschanged = loadVoices; }
+
+  function speak(text){
+    return new Promise(res => {
+      if (!('speechSynthesis' in window)) return res();
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = 'ko-KR'; u.rate = settings.rate;
+      const v = voices.find(v => v.voiceURI === settings.voiceURI) || voices[0];
+      if (v) u.voice = v;
+      let done = false; const finish = () => { if (!done){ done = true; res(); } };
+      u.onend = finish; u.onerror = finish;
+      setTimeout(finish, 15000);
+      speechSynthesis.speak(u);
+    });
+  }
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+  // ---------- 방송 대기열 (순서대로 읽기) ----------
+  const queue = []; let speaking = false;
+  function setStatus(text, warn){ const s = $('status'); s.textContent = text; s.classList.toggle('warn', !!warn); }
+  const fmtTime = d => d.toLocaleTimeString('ko-KR', {hour:'2-digit', minute:'2-digit'});
+
+  function enqueue(entry){ queue.push(entry); runQueue(); }
+  async function runQueue(){
+    if (speaking) return;
+    const entry = queue.shift();
+    if (!entry){ setStatus(unlocked ? '대기 중' : '소리가 꺼져 있어요. 소리 켜기를 눌러 주세요.', !unlocked); return; }
+    speaking = true;
+    showNow(entry);
+    if (!unlocked){ setStatus('소리가 꺼져 있어요. 소리 켜기를 눌러 주세요.', true); }
+    else {
+      setStatus('방송 중');
+      if (settings.chime) await playChime();
+      const text = `${entry.teacher} 선생님, ${entry.student} 학생이 찾아왔습니다.`;
+      for (let i = 0; i < settings.repeat; i++){ await speak(text); if (i < settings.repeat - 1) await sleep(700); }
+      await sleep(500);
+    }
+    speaking = false; runQueue();
+  }
+  function showNow(e){
+    $('nowEmpty').hidden = true; $('nowCall').hidden = false;
+    $('nowTeacher').textContent = e.teacher + ' 선생님';
+    $('nowStudent').textContent = e.student + ' 학생이 찾아왔어요';
+    $('nowTime').textContent = fmtTime(e.time);
+    const n = $('now'); n.classList.remove('ringing'); void n.offsetWidth; n.classList.add('ringing');
+  }
+  function renderLog(){
+    const ol = $('logList'); ol.innerHTML = '';
+    $('logEmpty').hidden = calls.length > 0;
+    calls.forEach(c => {
+      const li = document.createElement('li');
+      const t = document.createElement('time'); t.textContent = fmtTime(new Date(c.at));
+      const w = document.createElement('span'); w.className = 'who'; w.textContent = `${c.teacher} 선생님 ← ${c.student}`;
+      const b = document.createElement('button'); b.type = 'button'; b.textContent = '다시 듣기';
+      b.addEventListener('click', () => enqueue({teacher:c.teacher, student:c.student, time:new Date(c.at)}));
+      li.append(t, w, b); ol.appendChild(li);
+    });
+  }
+
+  // ---------- 소리 설정 ----------
+  $('rate').value = settings.rate; $('rateVal').textContent = '(' + Number(settings.rate).toFixed(2) + '배)';
+  $('repeat').value = String(settings.repeat);
+  $('chime').checked = settings.chime;
+  $('rate').addEventListener('input', e => { settings.rate = Number(e.target.value); $('rateVal').textContent = '(' + settings.rate.toFixed(2) + '배)'; saveSettings(); });
+  $('repeat').addEventListener('change', e => { settings.repeat = Number(e.target.value); saveSettings(); });
+  $('voice').addEventListener('change', e => { settings.voiceURI = e.target.value; saveSettings(); });
+  $('chime').addEventListener('change', e => { settings.chime = e.target.checked; saveSettings(); });
+  $('testBtn').addEventListener('click', async () => {
+    if (speaking) return;
+    speaking = true; setStatus('시험 방송 중');
+    if (settings.chime) await playChime();
+    await speak(TEACHERS[0].name + ' 선생님, 홍길동 학생이 찾아왔습니다.');
+    speaking = false; runQueue();
+  });
+
+  renderAway(); renderLog();
+  connect();
+})();
+</script>
+</body>
+</html>
