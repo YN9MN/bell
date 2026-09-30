@@ -53,10 +53,12 @@ button{cursor:pointer}
 .door{overflow-y:auto;padding:32px clamp(20px,4vw,48px);display:flex;flex-direction:column}
 .door h2{font-family:var(--display);font-weight:400;font-size:clamp(28px,3.4vw,40px);line-height:1.2;margin:0 0 24px}
 .plates{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px}
-.plate{background:var(--plate);border:1px solid var(--line);border-left:10px solid var(--board);border-radius:6px;padding:22px 18px;text-align:left;display:flex;align-items:baseline;gap:8px;box-shadow:0 2px 0 var(--line)}
+.plate{background:var(--plate);border:1px solid var(--line);border-left:10px solid var(--board);border-radius:6px;padding:22px 18px;text-align:left;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;box-shadow:0 2px 0 var(--line)}
 .plate:active{transform:translateY(2px);box-shadow:none}
-.plate-name{font-family:var(--display);font-size:34px;line-height:1}
-.plate-role{color:var(--muted);font-size:17px}
+.plate-name{font-family:var(--display);font-size:clamp(28px,3vw,34px);line-height:1;white-space:nowrap}
+.plate-role{color:var(--muted);font-size:17px;white-space:nowrap}
+.plate.checking{opacity:.65}
+.plate.checking .plate-role{color:var(--board)}
 .plate.absent{border-left-color:var(--line);background:transparent;box-shadow:none;border-style:dashed;border-left-style:solid}
 .plate.absent .plate-name{color:var(--muted)}
 .plate.absent .plate-role{color:var(--error)}
@@ -137,10 +139,10 @@ button{cursor:pointer}
 .door-msg{min-height:1.5em;margin:16px 0 0;color:var(--error);font-size:19px}
 
 .desk h3{margin:0 0 8px;font-weight:400;font-size:18px;color:var(--chalk-dim)}
-.desk-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
-.desk-btn{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px;border-radius:8px;border:1px solid var(--chalk-dim);background:transparent;color:var(--chalk);text-align:left}
-.desk-btn .d-name{font-family:var(--display);font-size:22px}
-.desk-btn .d-state{font-size:15px;color:#9FD8B4}
+.desk-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px}
+.desk-btn{display:flex;flex-direction:column;justify-content:center;align-items:flex-start;gap:2px;min-width:0;padding:12px 14px;border-radius:8px;border:1px solid var(--chalk-dim);background:transparent;color:var(--chalk);text-align:left}
+.desk-btn .d-name{font-family:var(--display);font-size:clamp(20px,2.2vw,24px);line-height:1.15;white-space:nowrap}
+.desk-btn .d-state{font-size:15px;color:#9FD8B4;white-space:nowrap}
 .desk-btn[aria-pressed="true"]{background:rgba(0,0,0,.25);border-style:dashed}
 .desk-btn[aria-pressed="true"] .d-name{color:var(--chalk-dim)}
 .desk-btn[aria-pressed="true"] .d-state{color:var(--bell)}
@@ -267,6 +269,8 @@ const FIREBASE_CONFIG = {
   appId: "1:909417827480:web:5dc823849a92107f7214ed"
 };
 const FIREBASE_VERSION = "12.19.0";
+// 부재중·호출이 계속 늦게 반영되면 true로 바꿔 보세요 (학교 네트워크가 실시간 연결을 막는 경우)
+const FORCE_LONG_POLLING = false;
 // ================================================================
 
 (function(){
@@ -290,7 +294,17 @@ const FIREBASE_VERSION = "12.19.0";
     document.querySelectorAll('.views button').forEach(b => b.setAttribute('aria-pressed', b.dataset.view === v));
   }
   document.querySelectorAll('.views button').forEach(b => b.addEventListener('click', () => setView(b.dataset.view)));
-  setView(settings.view);
+
+  // 주소 끝에 ?mode=student 또는 ?mode=office 가 붙어 있으면 그 화면으로 고정하고 전환 버튼을 숨김
+  const MODE_MAP = { student:'outside', office:'inside' };
+  const lockedMode = MODE_MAP[new URLSearchParams(location.search).get('mode')];
+  if (lockedMode){
+    stage.dataset.view = lockedMode;
+    document.querySelector('.views').hidden = true;
+    document.querySelector('.bar-title').textContent = lockedMode === 'outside' ? '교무실 초인종' : '교무실 알림판';
+  } else {
+    setView(settings.view);
+  }
   const boardActive = () => stage.dataset.view !== 'outside';   // 교무실 화면이 보일 때만 소리를 냄
 
   // ---------- Firebase 연결 ----------
@@ -318,35 +332,73 @@ const FIREBASE_VERSION = "12.19.0";
 
       const app = initializeApp(FIREBASE_CONFIG);
       await signInAnonymously(getAuth(app));            // 보이지 않는 익명 로그인 (보안 규칙용)
-      const fdb = fs.getFirestore(app);
+      // 학교 네트워크에서 실시간 연결이 막히면 다른 방식으로 자동 전환
+      const fdb = fs.initializeFirestore(app, FORCE_LONG_POLLING
+        ? { experimentalForceLongPolling: true }
+        : { experimentalAutoDetectLongPolling: true });
       const callsCol = fs.collection(fdb, 'calls');
       const stateDoc = fs.doc(fdb, 'state', 'teachers');
 
+      const applyAway = snap => {
+        away = (snap.exists() && snap.data().away) || {};
+        renderAway();
+      };
+      // 호출 목록 처리: 처음 보는 호출만 방송
+      let lastAt = LOAD_TIME - 15000;
+      const applyCalls = (docs, replaceList) => {
+        const t0 = startOfToday();
+        const list = docs.map(d => Object.assign({id:d.id}, d.data()));
+        if (replaceList){ calls = list.filter(c => c.at >= t0); }
+        else {
+          list.forEach(c => { if (!calls.some(x => x.id === c.id) && c.at >= t0) calls.push(c); });
+          calls.sort((a,b) => b.at - a.at); calls = calls.slice(0, 40);
+        }
+        renderLog();
+        list.forEach(c => {
+          if (callsReady && !seen.has(c.id) && c.at > LOAD_TIME - 15000 && boardActive())
+            enqueue({teacher:c.teacher, student:c.student, time:new Date(c.at)});
+          seen.add(c.id);
+          if (c.at > lastAt) lastAt = c.at;
+        });
+        callsReady = true;
+      };
+
+      // 서버에 직접 물어보는 확인 (실시간 연결이 멈췄을 때 대비)
+      const refreshAway = async () => {
+        try { applyAway(await fs.getDocFromServer(stateDoc)); setConn(true); }
+        catch(e){ setConn(false, '연결 불안정 · 다시 연결하는 중'); }
+      };
+      const refreshCalls = async () => {
+        if (!callsReady) return;
+        try {
+          const q = fs.query(callsCol, fs.where('at','>',lastAt), fs.orderBy('at','asc'), fs.limit(20));
+          applyCalls((await fs.getDocsFromServer(q)).docs, false);
+        } catch(e){ setConn(false, '연결 불안정 · 다시 연결하는 중'); }
+      };
+      const withTimeout = (p, ms) => Promise.race([p, new Promise(r => setTimeout(r, ms))]);
+
       backend = {
         addCall: c => fs.addDoc(callsCol, c),
-        setAway: next => fs.setDoc(stateDoc, { away: next })
+        setAway: next => fs.setDoc(stateDoc, { away: next }),
+        // 서버에서 최신 부재중 상태를 받아오면 true, 3초 안에 못 받으면 false
+        checkAway: () => Promise.race([
+          fs.getDocFromServer(stateDoc).then(snap => { applyAway(snap); setConn(true); return true; }).catch(() => false),
+          new Promise(r => setTimeout(() => r(false), 3000))
+        ])
       };
       const fail = err => { console.error(err); setConn(false, '연결 끊김 · 새로고침해 주세요'); };
 
-      fs.onSnapshot(stateDoc, snap => {
-        away = (snap.exists() && snap.data().away) || {};
-        renderAway();
-      }, fail);
+      fs.onSnapshot(stateDoc, applyAway, fail);
+      fs.onSnapshot(fs.query(callsCol, fs.orderBy('at','desc'), fs.limit(40)),
+        snap => applyCalls(snap.docs, true), fail);
 
-      fs.onSnapshot(fs.query(callsCol, fs.orderBy('at','desc'), fs.limit(40)), snap => {
-        const t0 = startOfToday();
-        calls = snap.docs.map(d => Object.assign({id:d.id}, d.data())).filter(c => c.at >= t0);
-        renderLog();
-        snap.docChanges().forEach(ch => {
-          const id = ch.doc.id;
-          if (ch.type === 'added' && callsReady && !seen.has(id)){
-            const c = ch.doc.data();
-            if (c.at > LOAD_TIME - 15000 && boardActive()) enqueue({teacher:c.teacher, student:c.student, time:new Date(c.at)});
-          }
-          seen.add(id);
-        });
-        callsReady = true;
-      }, fail);
+      // 교무실 태블릿만 15초마다 새 호출을 한 번 더 확인 (실시간 연결이 끊겨도 호출을 놓치지 않도록)
+      setInterval(() => { if (boardActive()) refreshCalls(); }, 15000);
+      // 화면이 다시 켜지거나 와이파이가 돌아오면 즉시 확인
+      const refreshAll = () => { refreshAway(); refreshCalls(); };
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshAll(); });
+      window.addEventListener('online', refreshAll);
+      window.addEventListener('focus', refreshAll);
 
       setConn(true);
 
@@ -379,7 +431,20 @@ const FIREBASE_VERSION = "12.19.0";
     ['stepPick','stepName','stepDone'].forEach(id => $(id).hidden = id !== step);
     if (step === 'stepPick') $('doorMsg').textContent = '';
   }
-  function pick(t){
+  let checking = false;
+  async function pick(t){
+    if (checking) return;
+    $('doorMsg').textContent = '';
+    if (backend){
+      // 이름을 누른 순간 서버에 직접 확인: 확인되기 전에는 다음 화면으로 넘어가지 않음
+      checking = true;
+      const el = plateEls[t.id];
+      el.classList.add('checking'); el.lastChild.textContent = '확인 중';
+      const ok = await backend.checkAway();
+      el.classList.remove('checking'); renderAway();
+      checking = false;
+      if (!ok){ $('doorMsg').textContent = '지금은 호출할 수 있는지 확인되지 않아요. 잠시 후 다시 눌러 주세요.'; return; }
+    }
     if (away[t.id]){ $('doorMsg').textContent = t.name + ' 선생님은 지금 자리에 안 계세요. 나중에 다시 와 주세요.'; return; }
     picked = t;
     $('askTitle').textContent = t.name + ' 선생님께 알려 드릴게요';
@@ -393,8 +458,11 @@ const FIREBASE_VERSION = "12.19.0";
   async function ring(){
     const student = $('studentName').value.trim().replace(/\s+/g,' ');
     if (!student){ $('nameErr').textContent = '이름을 적어 주세요.'; $('studentName').focus(); return; }
-    if (away[picked.id]){ $('nameErr').textContent = picked.name + ' 선생님이 방금 부재중으로 바뀌었어요.'; return; }
     $('bellBtn').disabled = true;
+    if (backend && !(await backend.checkAway())){       // 누르기 직전에 한 번 더 확인
+      $('nameErr').textContent = '연결이 확인되지 않아요. 잠시 후 다시 눌러 주세요.'; $('bellBtn').disabled = false; return;
+    }
+    if (away[picked.id]){ $('nameErr').textContent = picked.name + ' 선생님이 방금 부재중으로 바뀌었어요.'; $('bellBtn').disabled = false; return; }
     $('studentName').blur();
     const call = { teacher:picked.name, student, at:Date.now() };
     if (backend){
