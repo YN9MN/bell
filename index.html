@@ -148,6 +148,12 @@ button{cursor:pointer}
 .desk-btn[aria-pressed="true"] .d-state{color:var(--bell)}
 .desk-btn:disabled{opacity:.6}
 .desk-hint{margin:8px 0 0;color:var(--chalk-dim);font-size:15px}
+.ver{font-size:13px;color:var(--muted)}
+button{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.door-msg{min-height:1.5em;margin:16px 0 0;color:var(--error);font-size:19px}
+.door-msg:not(:empty){padding:14px 16px;border-radius:8px;background:var(--plate);border:2px solid var(--error);font-size:20px}
+.door-msg.info:not(:empty){border-color:var(--board);color:var(--ink)}
+.errbox{position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));padding:10px 14px;border-radius:8px;background:#B3261E;color:#fff;font-size:14px;z-index:9;word-break:break-all}
 [hidden]{display:none !important}
 </style>
 </head>
@@ -157,6 +163,7 @@ button{cursor:pointer}
   <h1 class="bar-title">교무실 초인종</h1>
   <div class="bar-right">
   <span class="conn" id="conn">연결 확인 중</span>
+  <span class="ver">v6</span>
   <div class="views" role="group" aria-label="화면 보기">
     <button type="button" data-view="both" aria-pressed="true">나란히 보기</button>
     <button type="button" data-view="outside" aria-pressed="false">학생용만</button>
@@ -172,6 +179,7 @@ button{cursor:pointer}
     <div id="stepPick">
       <h2>만나고 싶은 선생님을 눌러 주세요</h2>
       <div class="plates" id="plates"></div>
+      <p class="door-msg" id="doorMsg" role="alert"></p>
       <p class="away-note" id="awayNote" role="status" hidden></p>
     </div>
 
@@ -255,6 +263,7 @@ button{cursor:pointer}
     </details>
   </section>
 </main>
+<div class="errbox" id="errbox" hidden></div>
 
 <script type="module">
 // ================================================================
@@ -272,6 +281,10 @@ const FIREBASE_VERSION = "12.19.0";
 // 부재중·호출이 계속 늦게 반영되면 true로 바꿔 보세요 (학교 네트워크가 실시간 연결을 막는 경우)
 const FORCE_LONG_POLLING = false;
 // ================================================================
+
+const showErr = msg => { const b = document.getElementById('errbox'); if (!b) return; b.hidden = false; b.textContent = '오류: ' + msg; };
+window.addEventListener('error', e => showErr(e.message || String(e)));
+window.addEventListener('unhandledrejection', e => showErr((e.reason && (e.reason.code || e.reason.message)) || String(e.reason)));
 
 (function(){
   // 선생님 명단: id는 저장용 영문 기호, name은 화면과 음성에 쓰는 이름
@@ -381,10 +394,15 @@ const FORCE_LONG_POLLING = false;
         addCall: c => fs.addDoc(callsCol, c),
         setAway: next => fs.setDoc(stateDoc, { away: next }),
         // 서버에서 최신 부재중 상태를 받아오면 true, 3초 안에 못 받으면 false
-        checkAway: () => Promise.race([
-          fs.getDocFromServer(stateDoc).then(snap => { applyAway(snap); setConn(true); return true; }).catch(() => false),
-          new Promise(r => setTimeout(() => r(false), 3000))
-        ])
+        checkAway: () => new Promise(resolve => {
+          const timer = setTimeout(() => resolve(false), 3000);
+          try {
+            fs.getDocFromServer(stateDoc)
+              .then(snap => { applyAway(snap); setConn(true); resolve(true); })
+              .catch(err => { console.warn(err); resolve(false); })
+              .finally(() => clearTimeout(timer));
+          } catch(err){ clearTimeout(timer); resolve(false); }
+        })
       };
       const fail = err => { console.error(err); setConn(false, '연결 끊김 · 새로고침해 주세요'); };
 
@@ -429,23 +447,31 @@ const FORCE_LONG_POLLING = false;
 
   function show(step){
     ['stepPick','stepName','stepDone'].forEach(id => $(id).hidden = id !== step);
-    if (step === 'stepPick') $('doorMsg').textContent = '';
+    if (step === 'stepPick') doorMsg('');
   }
   let checking = false;
+  function doorMsg(text, info){ const m = $('doorMsg'); if (!m) return; m.textContent = text; m.classList.toggle('info', !!info); }
   async function pick(t){
     if (checking) return;
-    $('doorMsg').textContent = '';
+    doorMsg('');
     if (backend){
       // 이름을 누른 순간 서버에 직접 확인: 확인되기 전에는 다음 화면으로 넘어가지 않음
       checking = true;
       const el = plateEls[t.id];
-      el.classList.add('checking'); el.lastChild.textContent = '확인 중';
-      const ok = await backend.checkAway();
-      el.classList.remove('checking'); renderAway();
-      checking = false;
-      if (!ok){ $('doorMsg').textContent = '지금은 호출할 수 있는지 확인되지 않아요. 잠시 후 다시 눌러 주세요.'; return; }
+      let ok = false;
+      try {
+        el.classList.add('checking'); el.lastChild.textContent = '확인 중';
+        doorMsg(t.name + ' 선생님이 계신지 확인하고 있어요…', true);
+        ok = await backend.checkAway();
+      } catch(err){ showErr(err.message || String(err)); }
+      finally {
+        el.classList.remove('checking'); renderAway();
+        checking = false;
+      }
+      if (!ok){ doorMsg('지금은 호출할 수 있는지 확인되지 않아요. 잠시 후 다시 눌러 주세요.'); return; }
+      doorMsg('');
     }
-    if (away[t.id]){ $('doorMsg').textContent = t.name + ' 선생님은 지금 자리에 안 계세요. 나중에 다시 와 주세요.'; return; }
+    if (away[t.id]){ doorMsg(t.name + ' 선생님은 지금 자리에 안 계세요. 나중에 다시 와 주세요.'); return; }
     picked = t;
     $('askTitle').textContent = t.name + ' 선생님께 알려 드릴게요';
     $('studentName').value = ''; $('nameErr').textContent = '';
