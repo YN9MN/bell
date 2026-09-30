@@ -163,7 +163,7 @@ button{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
   <h1 class="bar-title">교무실 초인종</h1>
   <div class="bar-right">
   <span class="conn" id="conn">연결 확인 중</span>
-  <span class="ver">v6</span>
+  <span class="ver">v7</span>
   <div class="views" role="group" aria-label="화면 보기">
     <button type="button" data-view="both" aria-pressed="true">나란히 보기</button>
     <button type="button" data-view="outside" aria-pressed="false">학생용만</button>
@@ -552,7 +552,7 @@ window.addEventListener('unhandledrejection', e => showErr((e.reason && (e.reaso
     }
     unlocked = true;
     $('unlock').hidden = true;
-    if (!speaking) setStatus('대기 중');
+    if (!speaking) setStatus(ttsMode() === 'none' ? '음성이 나오지 않는 브라우저예요 · 소리 설정을 확인해 주세요' : '대기 중', ttsMode() === 'none');
   }
   document.addEventListener('pointerdown', unlockAudio);
   $('unlockBtn').addEventListener('click', unlockAudio);
@@ -579,8 +579,22 @@ window.addEventListener('unhandledrejection', e => showErr((e.reason && (e.reaso
 
   // ---------- 음성 읽기 ----------
   let voices = [];
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  // 음성 방식 고르기: 크롬은 브라우저 내장 음성, Fully Kiosk는 Fully 전용 음성 기능 사용
+  const hasWebSpeech = 'speechSynthesis' in window && typeof SpeechSynthesisUtterance !== 'undefined';
+  const hasFullyTts = () => typeof window.fully !== 'undefined' && typeof window.fully.textToSpeech === 'function';
+  const ttsMode = () => hasWebSpeech ? 'web' : (hasFullyTts() ? 'fully' : 'none');
+
   function loadVoices(){
-    if (!('speechSynthesis' in window)) { $('voiceNote').hidden = false; return; }
+    if (!hasWebSpeech) {
+      const note = $('voiceNote');
+      if (hasFullyTts()){ note.hidden = true; $('voice').closest('label').hidden = true; }
+      else {
+        note.hidden = false;
+        note.textContent = '이 브라우저에서는 음성을 낼 수 없어요. Fully Kiosk라면 설정 > Advanced Web Settings > Enable JavaScript Interface를 켜 주세요 (PLUS 기능). 또는 이 태블릿은 크롬으로 열어 주세요.';
+      }
+      return;
+    }
     voices = speechSynthesis.getVoices().filter(v => v.lang && v.lang.toLowerCase().startsWith('ko'));
     const sel = $('voice'); sel.innerHTML = '';
     const def = document.createElement('option'); def.value = ''; def.textContent = '기본 한국어 목소리'; sel.appendChild(def);
@@ -588,11 +602,17 @@ window.addEventListener('unhandledrejection', e => showErr((e.reason && (e.reaso
     sel.value = voices.some(v => v.voiceURI === settings.voiceURI) ? settings.voiceURI : '';
     $('voiceNote').hidden = voices.length > 0 || speechSynthesis.getVoices().length === 0;
   }
-  if ('speechSynthesis' in window){ loadVoices(); speechSynthesis.onvoiceschanged = loadVoices; }
+  if (hasWebSpeech){ loadVoices(); speechSynthesis.onvoiceschanged = loadVoices; } else { loadVoices(); }
 
   function speak(text){
+    const mode = ttsMode();
+    if (mode === 'fully'){
+      // Fully는 읽기가 끝났다는 신호를 주지 않아서, 글자 수로 읽는 시간을 어림잡아 기다림
+      try { window.fully.textToSpeech(text, 'ko_KR', '', true); } catch(e){ showErr('Fully 음성 오류: ' + e.message); }
+      return sleep(Math.round((text.length * 170) / settings.rate) + 800);
+    }
     return new Promise(res => {
-      if (!('speechSynthesis' in window)) return res();
+      if (mode === 'none') return res();
       const u = new SpeechSynthesisUtterance(text);
       u.lang = 'ko-KR'; u.rate = settings.rate;
       const v = voices.find(v => v.voiceURI === settings.voiceURI) || voices[0];
@@ -603,7 +623,6 @@ window.addEventListener('unhandledrejection', e => showErr((e.reason && (e.reaso
       speechSynthesis.speak(u);
     });
   }
-  const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   // ---------- 방송 대기열 (순서대로 읽기) ----------
   const queue = []; let speaking = false;
